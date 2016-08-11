@@ -1,0 +1,6 @@
+{
+  "name": "gmap-anim",
+  "short_name": "gmap-anim",
+  "start_url": "/",
+  "display": "standalone"
+}

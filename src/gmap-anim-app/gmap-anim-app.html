@@ -1,0 +1,194 @@
+<link rel="import" href="../../bower_components/polymer/polymer.html">
+<link rel="import" href="../../bower_components/google-map/google-map.html">
+<link rel="import" href="../../bower_components/google-map/google-map-point.html">
+<link rel="import" href="../../bower_components/google-map/google-map-poly.html">
+
+<link rel="import" href="../../bower_components/paper-button/paper-button.html">
+<link rel="import" href="../../bower_components/paper-checkbox/paper-checkbox.html">
+<link rel="import" href="../../bower_components/paper-input/paper-input.html">
+<link rel="import" href="../../bower_components/paper-material/paper-material.html">
+<link rel="import" href="../../bower_components/iron-form/iron-form.html">
+<link rel="import" href="../../bower_components/file-input/file-input.html">
+<link rel="import" href="../../bower_components/iron-icon/iron-icon.html">
+<link rel="import" href="../../bower_components/iron-icons/editor-icons.html">
+<dom-module id="gmap-anim-app">
+    <template>
+        <style>
+        :host {
+            display: inline-flex;
+        }
+        
+        .dark {
+            background: #a4aaad;
+        }
+        
+        paper-card.dark,
+        paper-card.amber,
+        paper-card.lime,
+        paper-card.cyan {
+            color: white;
+            --paper-card-header-color: white;
+        }
+        
+        .mapDesign {
+            margin-top: 30px;
+            width: 1000px;
+            height: 1000px;
+        }
+        
+        #notes {
+            display: inline-flex;
+            width: 284px;
+            margin-top: 30px;
+            /* position: relative; */
+            margin-left: 10px;
+        }
+        
+        #form {
+            width: 100%;
+            display: inline-flex;
+            flex-direction: column;
+            align-items: stretch;
+            padding-left: 10px;
+            padding-right: 10px;
+            flex-wrap: wrap;
+        }
+        
+        paper-color-circle {
+            width: 200px;
+            height: 200px;
+        }
+        
+        #movingImage {
+            position: absolute;
+            z-index: 10;
+            width: 100px;
+        }
+        </style>
+        <img id="movingImage" hidden={{moving}} height="100px" width="100px"></img>
+        <google-map version="3.exp" min-zoom="15" max-zoom="20"
+            language="en" api-key="AIzaSyBw9aJOCPfc4Hel0sTET3DgwJhuDeCDqdc"  click-events class="mapDesign" latitude="47.103773" longitude="6.834215">
+            <google-map-poly id="poly" stroke-opacity={{hideRoad}} stroke-weight="3" stroke-color="black">
+                <template is="dom-repeat" items="{{traject_step}}">
+                    <google-map-point latitude={{item.lat}} longitude={{item.lng}}></google-map-point>
+                </template>
+            </google-map-poly>
+        </google-map>
+        <paper-material id="notes">
+            <iron-form id="form">
+                <h2 style="    display: inline-flex;
+    align-self: center;">Options</h2>
+                <paper-input label="Select image" value={{fileName}}>
+                    <file-input on-change="getFileInfo" prefix accept="image/*" style="width: 35px;height: 35px;">
+                        <iron-icon icon="editor:insert-drive-file"></iron-icon>
+                    </file-input>
+                </paper-input>
+                <img id="preview" src="https://placeholdit.imgix.net/~text?txtsize=20&txt=No+image+selected%21&w=100&h=100&txttrack=0" style=" display: inline-flex;align-self: center;" height="100px" width="100px" />
+                <paper-input style="    margin: 30px;
+    margin-left: 0;
+    margin-right: 0px;" name="name" type='number' auto-validate label="Temps de parcours" value={{speed}} required></paper-input>
+                <paper-checkbox id="checkPath" on-change="setRoad" style="margin-bottom:30px"> Cacher le chemin </paper-checkbox>
+                <paper-button raised on-click="followPath">Start moving</paper-button>
+            </iron-form>
+        </paper-material>
+    </template>
+    <script>
+    Polymer({
+
+        is: 'gmap-anim-app',
+        ready: function() {
+            this.hideRoad = 1;
+            this.moving = true;
+            this.speed = 2000;
+            this.firstclick = true;
+            this.traject_step = [];
+            var map = document.querySelector('google-map');
+           // map.addEventListener('api-load', this.setProjection.bind(this))
+            map.addEventListener('google-map-click', this.addStep.bind(this))
+        },
+        setRoad: function(event) {
+            console.log(event)
+            if (this.hideRoad > 0) {
+                this.set('hideRoad', 0);
+            } else {
+                this.set('hideRoad', 1)
+            }
+
+        },
+        getFileInfo: function(event) {
+            var file = event.detail.valid[0];
+            this.set('fileName', file.name);
+            this.previewImage(file)
+        },
+        previewImage: function(input) {
+            var preview = document.getElementById('preview');
+            var movingImage = document.getElementById('movingImage');
+
+            if (input) {
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    preview.setAttribute('src', e.target.result);
+                    movingImage.setAttribute('src', e.target.result);
+                }
+                reader.readAsDataURL(input);
+            } else {
+                preview.setAttribute('src', 'placeholder.png');
+            }
+
+        },
+        addStep: function(event) {
+            if (this.firstclick) {
+                this.set('firstclick', false);
+                // var elem = document.querySelector('#voiture')
+                //  elem.setAttribute('style',"left:"+event.detail.pixel.x+"px ;top:"+event.detail.pixel.y+"px")
+            }
+            this.push('traject_step', {
+                lat: event.detail.latLng.lat(),
+                lng: event.detail.latLng.lng()
+            });
+        },
+        setProjection: function() {
+            var map = document.querySelector('google-map');
+            this.overlay = new google.maps.OverlayView();
+            this.overlay.setMap(map.map);
+        },
+
+        getCoord: function(mapPoint) {
+            return this.overlay.getProjection().fromLatLngToDivPixel(mapPoint.getPosition())
+        },
+
+        followPath: function() {
+            this.set('moving', false);
+            var elem = document.querySelector('#movingImage')
+            var pointList = document.querySelectorAll('google-map-point');
+            var translationbase = {
+                transform: 'translate(0px,0px)'
+            }
+            var translationArray = []
+            for (var i = 0; i < pointList.length; i = i + 1) {
+                translationArray.push(this.translate(pointList[i]));
+            }
+            elem.animate(translationArray, {
+                duration: parseInt(this.speed),
+                iterations: 1,
+                fill: 'both'
+            })
+        },
+        translate: function(pointA) {
+            var coordA = this.getCoord(pointA);
+            var tx = Math.round(coordA.x);
+            var ty = Math.round(coordA.y);
+            return {
+                transform: 'translate(' + tx + 'px,' + ty + 'px)'
+            };
+        },
+        properties: {
+            prop1: {
+                type: String,
+                value: 'gmap-anim-app',
+            },
+        },
+
+    });
+    </script>
+</dom-module>
