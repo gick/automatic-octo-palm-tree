@@ -2,10 +2,10 @@
 <link rel="import" href="../../bower_components/google-map/google-map.html">
 <link rel="import" href="../../bower_components/google-map/google-map-point.html">
 <link rel="import" href="../../bower_components/google-map/google-map-poly.html">
-
 <link rel="import" href="../../bower_components/paper-button/paper-button.html">
 <link rel="import" href="../../bower_components/paper-checkbox/paper-checkbox.html">
 <link rel="import" href="../../bower_components/paper-input/paper-input.html">
+<link rel="import" href="../../bower_components/paper-slider/paper-slider.html">
 <link rel="import" href="../../bower_components/paper-material/paper-material.html">
 <link rel="import" href="../../bower_components/iron-form/iron-form.html">
 <link rel="import" href="../../bower_components/file-input/file-input.html">
@@ -60,14 +60,14 @@
         }
         
         #movingImage {
+            
             position: absolute;
             z-index: 10;
-            width: 100px;
+            background-color: blue;
         }
         </style>
-        <img id="movingImage" hidden={{moving}} height="100px" width="100px"></img>
-        <google-map version="3.exp" min-zoom="15" max-zoom="20"
-            language="en" api-key="AIzaSyBw9aJOCPfc4Hel0sTET3DgwJhuDeCDqdc"  click-events class="mapDesign" latitude="47.103773" longitude="6.834215">
+        <google-map version="3.exp" zoom=17 language="en" api-key="AIzaSyBw9aJOCPfc4Hel0sTET3DgwJhuDeCDqdc" click-events class="mapDesign" latitude="47.103773" longitude="6.834215">
+            <img id="movingImage" height="[[sliderWidth]]" width="[[sliderWidth]]"></img>
             <google-map-poly id="poly" stroke-opacity={{hideRoad}} stroke-weight="3" stroke-color="black">
                 <template is="dom-repeat" items="{{traject_step}}">
                     <google-map-point latitude={{item.lat}} longitude={{item.lng}}></google-map-point>
@@ -87,8 +87,10 @@
                 <paper-input style="    margin: 30px;
     margin-left: 0;
     margin-right: 0px;" name="name" type='number' auto-validate label="Temps de parcours" value={{speed}} required></paper-input>
-                <paper-checkbox id="checkPath" on-change="setRoad" style="margin-bottom:30px"> Cacher le chemin </paper-checkbox>
-                <paper-button raised on-click="followPath">Start moving</paper-button>
+                <paper-checkbox id="checkPath" on-change="clearDirection" style="margin-bottom:30px"> Cacher le chemin </paper-checkbox>
+                <div>Taille image</div>
+                <paper-slider style="width:100%" min="1" max="200" value="{{sliderWidth}}"></paper-slider>
+                <paper-button raised on-click="followDirPath">Start moving</paper-button>
             </iron-form>
         </paper-material>
     </template>
@@ -97,14 +99,36 @@
 
         is: 'gmap-anim-app',
         ready: function() {
+            this.hideDirection = false;
+            this.sliderWidth = 30;
             this.hideRoad = 1;
             this.moving = true;
             this.speed = 2000;
+            this.directionStep = [];
             this.firstclick = true;
             this.traject_step = [];
+            this.service = false;
             var map = document.querySelector('google-map');
-           // map.addEventListener('api-load', this.setProjection.bind(this))
+            map.addEventListener('google-map-ready', this.setServices.bind(this))
             map.addEventListener('google-map-click', this.addStep.bind(this))
+        },
+        setServices: function() {
+            if (!this.service) {
+                var map = document.querySelector('google-map');
+                this.overlay = new google.maps.OverlayView();
+                this.overlay.setMap(map.map);
+                this.overlay.draw = function() {};
+                this.overlay.add = function() {};
+                this.overlay.remove = function() {};
+
+                this.directionsService = new google.maps.DirectionsService;
+                this.directionsDisplay = new google.maps.DirectionsRenderer;
+                this.directionsDisplay.setMap(map.map);
+                this.directionsDisplay.setOptions({
+                    draggable: true
+                });
+                this.service = true;
+            }
         },
         setRoad: function(event) {
             console.log(event)
@@ -142,38 +166,104 @@
                 // var elem = document.querySelector('#voiture')
                 //  elem.setAttribute('style',"left:"+event.detail.pixel.x+"px ;top:"+event.detail.pixel.y+"px")
             }
-            this.push('traject_step', {
-                lat: event.detail.latLng.lat(),
-                lng: event.detail.latLng.lng()
-            });
+            this.push('directionStep', event.detail.latLng);
+
+            if (this.directionStep.length > 1) {
+                this.addDirection();
+            };
         },
-        setProjection: function() {
-            var map = document.querySelector('google-map');
-            this.overlay = new google.maps.OverlayView();
-            this.overlay.setMap(map.map);
+        clearDirection: function() {
+            this.hideDirection = !this.hideDirection;
+            if (this.hideDirection) {
+                this.directionsDisplay.setMap(null);
+            } else {
+                var map = document.querySelector('google-map');
+                this.directionsDisplay.setMap(map.map);
+
+            }
+        },
+        addDirection: function(lastIndex) {
+            var dest = this.directionStep[1];
+            var origin = this.directionStep[0];
+            this.directionsService.route({
+                origin: origin,
+                destination: dest,
+                travelMode: google.maps.TravelMode.DRIVING
+            }, function(response, status) {
+                if (status === google.maps.DirectionsStatus.OK) {
+                    this.shift('directionStep');
+                    this.currentDir = response.routes[0].overview_path;
+                    this.directionsDisplay.setDirections(response);
+                } else {
+                    window.alert('Directions request failed due to ' + status);
+                }
+            }.bind(this))
         },
 
         getCoord: function(mapPoint) {
-            return this.overlay.getProjection().fromLatLngToDivPixel(mapPoint.getPosition())
+
+            var map = document.querySelector('google-map');
+            var overlay = new google.maps.OverlayView();
+            overlay.draw = function() {};
+            overlay.setMap(map.map);
+            return overlay.getProjection().fromLatLngToContainerPixel(mapPoint);
+            // return this.overlay.getProjection().fromLatLngToDivPixel(mapPoint.getPosition())
         },
 
-        followPath: function() {
+        /* followPath: function() {
+             this.set('moving', false);
+             var elem = document.querySelector('#movingImage')
+             var pointList = document.querySelectorAll('google-map-point');
+             var translationbase = {
+                 transform: 'translate(0px,0px)'
+             }
+             var translationArray = []
+             for (var i = 0; i < pointList.length; i = i + 1) {
+                 translationArray.push(this.translate(pointList[i]));
+             }
+             elem.animate(translationArray, {
+                 duration: parseInt(this.speed),
+                 iterations: 1,
+                 fill: 'both'
+             })
+         },*/
+        /*  setOrigin: function() {
+              var pointList = this.currentDir;
+              var coordStart = this.getCoord(pointList[0])
+              console.log(coordStart);
+              var top=Math.round(coordStart.y)+'px';
+                          var left=Math.round(coordStart.x)+'px';
+
+              var elem = document.querySelector('#movingImage');
+              elem.setAttribute('style','position:fixed;display:block;z-index:10;top:'+top+';left:'+left)
+              elem.style.left=coordStart.x;
+          },*/
+        followDirPath: function() {
             this.set('moving', false);
             var elem = document.querySelector('#movingImage')
-            var pointList = document.querySelectorAll('google-map-point');
+            var pointList = this.currentDir;
+            var coordStart = this.getCoord(pointList[0])
+            console.log(coordStart);
             var translationbase = {
                 transform: 'translate(0px,0px)'
-            }
+            };
+
+
+            //  elem.style.left='0px'
+            // elem.style.top='0px'
+            // elem.style.top = '0px';
+            // elem.style.left = '0px';ranslatio
             var translationArray = []
             for (var i = 0; i < pointList.length; i = i + 1) {
                 translationArray.push(this.translate(pointList[i]));
             }
+            console.log(translationArray)
             elem.animate(translationArray, {
                 duration: parseInt(this.speed),
-                iterations: 1,
-                fill: 'both'
+                iterations: 1
             })
         },
+
         translate: function(pointA) {
             var coordA = this.getCoord(pointA);
             var tx = Math.round(coordA.x);
