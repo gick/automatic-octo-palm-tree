@@ -60,7 +60,7 @@
         }
         
         #movingImage {
-            
+
             position: absolute;
             z-index: 10;
             background-color: blue;
@@ -241,9 +241,7 @@
         followDirPath: function() {
             this.set('moving', false);
             var elem = document.querySelector('#movingImage')
-            var pointList = this.currentDir;
-            var coordStart = this.getCoord(pointList[0])
-            console.log(coordStart);
+            var pointList = this.directionsDisplay.getDirections().routes[0].overview_path
             var translationbase = {
                 transform: 'translate(0px,0px)'
             };
